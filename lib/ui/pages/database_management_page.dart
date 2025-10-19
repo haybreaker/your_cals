@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:your_cals/data/providers/unified_provider.dart';
 
 class DatabaseManagementPage extends StatefulWidget {
   const DatabaseManagementPage({super.key});
@@ -13,12 +12,9 @@ class DatabaseManagementPage extends StatefulWidget {
 }
 
 class _DatabaseManagementPageState extends State<DatabaseManagementPage> {
-  late final UnifiedProvider unifiedProvider;
-
   @override
   void initState() {
     super.initState();
-    unifiedProvider = context.read<UnifiedProvider>();
   }
 
   Future<void> importDB() async {
@@ -32,7 +28,7 @@ class _DatabaseManagementPageState extends State<DatabaseManagementPage> {
           return;
         }
 
-        await unifiedProvider.importDb(result.files.single);
+        //await unifiedProvider.importDb(result.files.single);
         _showSnackbar("Database imported successfully.");
       } else {
         _showSnackbar("Import cancelled.");
@@ -61,7 +57,7 @@ class _DatabaseManagementPageState extends State<DatabaseManagementPage> {
         _showSnackbar("Exported to:\n$exportPath");
       }
 
-      unifiedProvider.exportDb(exportPath);
+      //unifiedProvider.exportDb(exportPath);
     } catch (e) {
       _showSnackbar("Error exporting DB: $e");
     }
@@ -81,7 +77,7 @@ class _DatabaseManagementPageState extends State<DatabaseManagementPage> {
     );
 
     if (confirm == true) {
-      await unifiedProvider.deleteDb();
+      //await unifiedProvider.deleteDb();
       _showSnackbar("Database deleted.");
     }
   }

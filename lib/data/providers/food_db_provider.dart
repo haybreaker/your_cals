@@ -1,39 +1,34 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive.dart';
+import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqlite3/sqlite3.dart';
-import 'package:csv/csv.dart';
+import 'package:uuid/uuid.dart';
 
+import 'package:your_cals/data/databases/interfaces/database_helper_interface.dart';
+import 'package:your_cals/data/objects/food.dart';
+import 'package:your_cals/data/objects/macros.dart';
+import 'package:your_cals/data/objects/open_food_facts_lookup.dart'; // Import the enum
+
+/// Provider that manages syncing and loading foods from OpenFoodFacts
+/// into the local SQLite database.
 class FoodDatabaseProvider extends ChangeNotifier {
+  final DatabaseHelperInterface dbHelper;
   static const _dataUrl = 'https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz';
   static const _refreshInterval = Duration(days: 7);
+  static const _batchSize = 500; // Insert in batches
 
-  late Database _db;
   bool isPullingLatest = false;
   double percentageOfDownload = 0.0;
   DateTime? lastUpdated;
 
-  Database get db => _db;
+  FoodDatabaseProvider({required this.dbHelper});
 
-  /// Initialize the shared SQLite database and refresh data if outdated.
-  Future<void> initialize(Database existingDb) async {
-    _db = existingDb;
-
-    // Ensure the Foods table exists
-    _db.execute('''
-      CREATE TABLE IF NOT EXISTS Foods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT,
-        product_name TEXT,
-        energy_100g REAL,
-        proteins_100g REAL,
-        fat_100g REAL,
-        carbohydrates_100g REAL
-      );
-    ''');
+  /// Initializes the DB (creates table if needed and refreshes if outdated)
+  Future<void> initialize() async {
+    await dbHelper.init();
 
     final dir = await getApplicationDocumentsDirectory();
     final lastFile = File('${dir.path}/last_update.txt');
@@ -49,6 +44,7 @@ class FoodDatabaseProvider extends ChangeNotifier {
     }
   }
 
+  /// Refreshes data by downloading, decompressing, and importing.
   Future<void> _refreshData(File lastFile) async {
     isPullingLatest = true;
     percentageOfDownload = 0;
@@ -57,9 +53,8 @@ class FoodDatabaseProvider extends ChangeNotifier {
     try {
       final tempDir = await getTemporaryDirectory();
       final gzPath = '${tempDir.path}/openfoodfacts.csv.gz';
-      final csvPath = '${tempDir.path}/openfoodfacts.csv';
 
-      // Download gzipped CSV
+      // --- Download CSV ---
       final request = http.Request('GET', Uri.parse(_dataUrl));
       final response = await http.Client().send(request);
 
@@ -69,48 +64,20 @@ class FoodDatabaseProvider extends ChangeNotifier {
 
       await for (final chunk in response.stream) {
         received += chunk.length;
-        if (total > 0) percentageOfDownload = received / total;
+        if (total > 0) percentageOfDownload = (received / total) * 0.3; // 30% for download
         sink.add(chunk);
         notifyListeners();
       }
       await sink.close();
 
-      // Decompress
-      final bytes = await File(gzPath).readAsBytes();
-      final decompressed = GZipDecoder().decodeBytes(bytes);
-      await File(csvPath).writeAsBytes(decompressed);
+      percentageOfDownload = 0.3;
+      notifyListeners();
 
-      // Parse and import
-      final csvContent = await File(csvPath).readAsString();
-      final rows = const CsvToListConverter(eol: '\n', fieldDelimiter: '\t').convert(csvContent, shouldParseNumbers: false);
+      // --- Stream decompress and parse directly ---
+      await _streamDecompressAndParse(gzPath);
 
-      _db.execute('DELETE FROM Foods;');
-      final insertStmt = _db.prepare('''
-        INSERT INTO Foods (code, product_name, energy_100g, proteins_100g, fat_100g, carbohydrates_100g)
-        VALUES (?, ?, ?, ?, ?, ?);
-      ''');
-
-      final totalRows = rows.length;
-      for (int i = 1; i < totalRows; i++) {
-        final r = rows[i];
-        if (r.length < 10) continue;
-
-        insertStmt.execute([
-          r[0]?.toString(),
-          r[1]?.toString(),
-          double.tryParse(r[5]?.toString() ?? '') ?? 0,
-          double.tryParse(r[6]?.toString() ?? '') ?? 0,
-          double.tryParse(r[7]?.toString() ?? '') ?? 0,
-          double.tryParse(r[8]?.toString() ?? '') ?? 0,
-        ]);
-
-        if (i % 1000 == 0) {
-          percentageOfDownload = i / totalRows;
-          notifyListeners();
-        }
-      }
-
-      insertStmt.dispose();
+      // Clean up gz file
+      await File(gzPath).delete();
 
       await lastFile.writeAsString(DateTime.now().toIso8601String());
       lastUpdated = DateTime.now();
@@ -121,5 +88,107 @@ class FoodDatabaseProvider extends ChangeNotifier {
       percentageOfDownload = 0;
       notifyListeners();
     }
+  }
+
+  /// Stream decompress the gzip file and parse CSV line by line
+  Future<void> _streamDecompressAndParse(String gzPath) async {
+    final file = File(gzPath);
+
+    // Stream decompress the gzip file directly
+    final stream = file.openRead().transform(gzip.decoder).transform(utf8.decoder).transform(const LineSplitter());
+
+    bool isFirstLine = true;
+    List<Food> batch = [];
+    int lineCount = 0;
+
+    percentageOfDownload = 0.4;
+    notifyListeners();
+
+    await for (final line in stream) {
+      if (isFirstLine) {
+        isFirstLine = false;
+        continue; // Skip header
+      }
+
+      lineCount++;
+
+      try {
+        // Parse tab-delimited line
+        final fields = line.split('\t');
+
+        // Need at least enough fields to access the highest index we use
+        if (fields.length <= OpenFoodFactsCsv.proteins100g.index) continue;
+
+        // Extract fields using the enum
+        final barcode = OpenFoodFactsCsv.code.getField(fields);
+        final name = OpenFoodFactsCsv.productName.getField(fields);
+        final brand = OpenFoodFactsCsv.brands.getField(fields);
+
+        // Parse nutritional values safely using enum helper methods
+        final energyKcal = OpenFoodFactsCsv.energyKcal100g.getDouble(fields) ?? 0;
+        final fat = OpenFoodFactsCsv.fat100g.getDouble(fields) ?? 0;
+        final carbs = OpenFoodFactsCsv.carbohydrates100g.getDouble(fields) ?? 0;
+        final protein = OpenFoodFactsCsv.proteins100g.getDouble(fields) ?? 0;
+
+        // Skip items with no nutritional data
+        if (energyKcal == 0 && fat == 0 && carbs == 0 && protein == 0) continue;
+
+        // Skip items without name
+        if (name.isEmpty) continue;
+
+        // Generate ID if barcode is empty
+        // Use a hash of name + brand to create a unique, deterministic ID
+        final foodId = Uuid().v4().toString();
+
+        final food = Food(
+          id: foodId,
+          barcode: barcode, // Now stores either barcode or generated ID
+          name: name,
+          caloriesPerHundred: energyKcal,
+          servingSize: 100,
+          brand: brand,
+          macros: Macros(energyKcal: energyKcal, protein: protein, fat: fat, carbs: carbs),
+        );
+
+        batch.add(food);
+
+        // Insert in batches
+        if (batch.length >= _batchSize) {
+          await dbHelper.insertAllFoods(batch);
+          batch.clear();
+
+          // Update progress (40% to 100%)
+          // Estimate based on line count - OpenFoodFacts has ~3M products
+          percentageOfDownload = 0.4 + (lineCount / 3000000) * 0.6;
+          if (percentageOfDownload > 0.99) percentageOfDownload = 0.99;
+
+          if (lineCount % 5000 == 0) {
+            notifyListeners();
+          }
+        }
+      } catch (e) {
+        // Skip malformed lines
+        if (kDebugMode && lineCount < 100) {
+          debugPrint('Error parsing line $lineCount: $e');
+        }
+      }
+    }
+
+    // Insert remaining batch
+    if (batch.isNotEmpty) {
+      await dbHelper.insertAllFoods(batch);
+    }
+
+    percentageOfDownload = 1.0;
+    notifyListeners();
+  }
+
+  // --- API for UI / Logic ---
+  Future<List<Food>> getFoods() async {
+    return await dbHelper.findFoods(null, null);
+  }
+
+  Future<List<Food>> searchFoods(String query) async {
+    return await dbHelper.findFoods(query, null);
   }
 }

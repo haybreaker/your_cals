@@ -15,9 +15,9 @@ class _MainPageNavbarState extends State<MainPageNavbar> {
   Widget build(BuildContext context) {
     const items = [
       {"label": "Home", "icon": Icons.home_rounded},
-      {"label": "Stats", "icon": Icons.bar_chart_rounded},
-      {"label": "Add", "icon": Icons.add_rounded},
       {"label": "Cal", "icon": Icons.calendar_today_rounded},
+      {"label": "Add", "icon": Icons.add_rounded},
+      {"label": "Stats", "icon": Icons.bar_chart_rounded},
       {"label": "Body", "icon": Icons.monitor_weight_rounded},
     ];
 
@@ -125,7 +125,7 @@ class ElevatedAddButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2))],
           ),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Icon(icon, size: 32, color: Theme.of(context).colorScheme.onPrimaryContainer),
         ),
       ),
