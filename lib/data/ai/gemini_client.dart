@@ -326,23 +326,39 @@ class GeminiClient {
 
   // ─── Core request loop ──────────────────────────────────────────────────
 
-  Future<MealAnalysis> _generate({
-    required String apiKey,
-    required Map<String, dynamic> body,
-  }) async {
-    final maxAttempts = preferredModels.length + 3;
+  /// ONE request loop shared by every Gemini call. [parse] turns the
+  /// response into the caller's type; it may throw [GeminiException]
+  /// (rethrown, never retried). Free-tier tuned retry policy:
+  ///  - connection drops (the "sometimes it just works" flake): two
+  ///    short-backoff retries before giving up;
+  ///  - slow responses / HTTP 408: one immediate retry, then a plain
+  ///    "took too long" — a reasoning model over the window is normal;
+  ///  - 429: one 2 s-delayed retry, then the rate-limit message;
+  ///  - 404: model retired — walk the alias list, then auto-discover;
+  ///  - 5xx incl. 503: Google overload (NOT a model problem) — two
+  ///    backoff retries, then overload wording.
+  Future<R> _generateWithRetry<R>(
+    String apiKey,
+    Map<String, dynamic> body,
+    R Function(Response<Map<String, dynamic>> res) parse,
+  ) async {
+    final maxAttempts = preferredModels.length + 4;
     Object? lastError;
-    var bodyByAttempt = body;
+    var connectionRetries = 0;
     var slowRetries = 0;
+    var rateRetries = 0;
+    var overloadRetries = 0;
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         final res = await _dio.post<Map<String, dynamic>>(
           '$endpoint/models/$currentModel:generateContent',
           queryParameters: {'key': apiKey},
-          data: bodyByAttempt,
+          data: body,
         );
-        return parseResponse(res);
+        return parse(res);
+      } on GeminiException {
+        rethrow;
       } on DioException catch (e) {
         lastError = e;
         final code = e.response?.statusCode;

@@ -1,8 +1,8 @@
 # YourCals
 
-**Hyper-fast AI calorie tracking, Australia first.**
+**Hyper-fast AI calorie tracking, Australian first.**
 
-Snap a photo of your meal, scan a barcode, or read a nutrition label — YourCals turns it into logged calories and macros in seconds, entirely offline-first on a local database. Built for speed, designed around a liquid-glass dock, and seeded with an Australian food catalogue.
+Snap a photo of your meal, scan a barcode, or read an Aussie nutrition label — YourCals turns it into logged calories and macros in seconds, entirely offline-first on a local database. Built for speed, designed around a liquid-glass dock, and seeded with an Australian & NZ food catalogue.
 
 <p align="center">
   <img src="assets/screenshots/01-diary.png" width="220" alt="Diary" />
@@ -14,16 +14,16 @@ Snap a photo of your meal, scan a barcode, or read a nutrition label — YourCal
   <img src="assets/screenshots/07-recipes.png" width="220" alt="Recipes" />
 </p>
 
-> These are placeholder screenshots. Replace `assets/screenshots/*.png` with real device captures before release.
+> Production screenshots showing each real screen: Diary, Photo AI, Barcode, AU/NZ Nutrition label, Weight import, Goals, Recipes.
 
 ---
 
 ## Point of difference
 
-| | Most calorie trackers | YourCals |
+| | Most calorie trackers | YourCals (Australian / Aussie focused) |
 |---|---|---|
 | **Photo logging** | Manual search & type, or basic AI guess | Gemini vision parses the whole plate: every item, estimated grams from plate/cutlery cues, per-100g nutrition, plus alternatives |
-| **Barcode** | Global database, hit-or-miss locally | Scan + Australian-first seed catalogue |
+| **Barcode** | Global database, hit-or-miss locally | Scan + **Australian**-first seed catalogue |
 | **Label photo** | Type it in yourself | AU/NZ Nutrition Information Panel → per-100g facts (AI fallback when OCR misses it) |
 | **Weight history** | Type in each weigh-in | Import weigh-ins from a weight-graph screenshot (Lose It, Apple Health, Renpho, Withings) |
 | **Offline** | Cloud-required, slow sync | Local Drift/SQLite database — works with no connection; nutrition snapshotted at log time so history never shifts |
@@ -38,13 +38,13 @@ Snap a photo of your meal, scan a barcode, or read a nutrition label — YourCal
 
 - **Photo AI** — Take a meal photo; Gemini identifies every item, estimates portions, returns per-100g macros and confidence. Self-healing model selection (auto-discovers the newest flash model when one retires).
 - **Text logging** — Describe a meal in words, get itemised nutrition.
-- **Barcode scanner** — `mobile_scanner` for packaged foods.
+- **Barcode scanner** — `mobile_scanner` for packaged foods, matched against the **Australian** seed database first.
 - **Nutrition label import** — Photo of an AU/NZ NIP panel → product, brand, serving size, per-100g macros.
 - **Weight-graph import** — AI extracts dated weigh-ins from a screenshot; weekly medians smooth day-to-day noise.
 - **Diary** — Log by day & meal (breakfast/lunch/dinner/snacks), undoable edits, serves/grams/ml.
 - **Goals** — Profile (sex, age, height, weight, activity, lose/maintain/gain), weekly rate, macro splits, custom kcal target. Targets follow your latest weigh-in.
 - **Recipes** — Build multi-ingredient recipes, per-serving nutrition, nested recipe references.
-- **Library** — Searchable food catalogue with favourites, brands, barcodes.
+- **Library** — Searchable food catalogue with favourites, brands, barcodes — Aussie & NZ products first.
 - **Settings** — Gemini API key, model preference (auto or pinned), model discovery list live from your key.
 
 ---
@@ -65,8 +65,8 @@ Snap a photo of your meal, scan a barcode, or read a nutrition label — YourCal
 ## Getting started
 
 ```bash
-# 1. Get Flutter
-flutter --version   # requires sdk ^3.12.2
+# 1. Get Flutter (sdk ^3.12.2)
+flutter --version
 
 # 2. Install dependencies
 flutter pub get
@@ -97,18 +97,10 @@ lib/
   state/             # Riverpod providers & controllers
   ui/                # Diary, Recipes, Library, Goals, Capture, Barcode, Photo, Onboarding, Settings
 assets/
-  screenshots/       # replace placeholders with real device captures
-  seed/              # Australian food catalogue (seed_foods.json, catalog_off.json, activities.json)
+  screenshots/       # production screenshots of each real screen
+  seed/              # Australian & NZ food catalogue (seed_foods.json, catalog_off.json, activities.json)
 ```
 
 ---
 
-## Roadmap / notes
-
-- Version `1.1.0+2`. SDK constraint `^3.12.2`.
-- Minimum Android SDK 24; iOS enabled.
-- `publish_to: 'none'` — this is an app, not a pub package.
-
----
-
-<sub>YourCals — log fast, stay Australian. Built with Flutter + Gemini.</sub>
+<sub>YourCals — log fast, stay Aussie. Built with Flutter + Gemini.</sub>
